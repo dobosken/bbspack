@@ -1,7 +1,3 @@
-#![cfg_attr(feature = "gui", windows_subsystem = "windows")]
-#[cfg(feature = "gui")]
-mod app;
-
 use std::{
     fs::File,
     io::{Cursor, Read, Seek, SeekFrom, Write},
@@ -10,50 +6,42 @@ use std::{
 
 use anyhow::Result as AResult;
 use byteorder::{ReadBytesExt, WriteBytesExt, LE};
-use clap::{AppSettings, Clap};
+use clap::{Parser};
 
-/// Extract and reinject bbscript from the uexp and uasset files in strive
-#[cfg(not(feature = "gui"))]
-#[derive(Clap)]
-#[clap(author = "Made by Pangaea")]
-#[clap(setting = AppSettings::ColoredHelp)]
+/// Extract/inject BBS from/into the .uexp and .uasset files of GGST/DBFZ
+#[derive(Parser)]
+#[clap(author = "Original 'ggst-bbs-unpacker' by Pangaea - 'bbspack' fork by Broscar")]
+#[clap(arg_required_else_help(true), subcommand_required(true))]
 enum Args {
-    /// Extract bbscript from a .uexp file
+    /// Extract BBS
     Extract {
-        /// The .uexp file to extract the BBScript from
+        /// The .uexp to extract the BBS from
         #[clap(parse(from_os_str))]
         uexp: PathBuf,
-        /// The file to save the bbscript to
+        /// Output path+filename for the BBS
         #[clap(parse(from_os_str))]
         output: PathBuf,
-        /// Allow the program to overwrite the output path if the file already exists
-        #[clap(short, long)]
-        overwrite: bool,
     },
-    /// Inject a modified script back into the uexp and uasset files
+    /// Inject BBS
     Inject {
-        /// The BBScript file you want to inject into the uexp
+        /// The BBS you want to inject
         #[clap(parse(from_os_str))]
         file: PathBuf,
-        /// The uexp file you want to inject the script into
+        /// The .uexp you want to inject the script into
         #[clap(parse(from_os_str))]
         uexp: PathBuf,
-        /// The uasset file corresponding to the uexp file (needed for metadata changes)
+        /// The .uasset that matches the .uexp file
         #[clap(parse(from_os_str))]
         uasset: PathBuf,
-        #[clap(short, long)]
-        force: bool,
     },
 }
 
-#[cfg(not(feature = "gui"))]
 fn main() {
     if let Err(e) = run() {
         println!("ERROR: {}", e);
     }
 }
 
-#[cfg(not(feature = "gui"))]
 fn run() -> AResult<()> {
     let args = Args::parse();
 
@@ -61,36 +49,18 @@ fn run() -> AResult<()> {
         Args::Extract {
             uexp,
             output,
-            overwrite,
-        } => extract_file(uexp, output, overwrite),
+        } => extract_file(uexp, output),
         Args::Inject {
             file,
             uexp,
             uasset,
-            force,
-        } => inject_file(file, uexp, uasset, force),
+        } => inject_file(file, uexp, uasset),
     }?;
 
     Ok(())
 }
 
-#[cfg(feature = "gui")]
-fn main() {
-use eframe::egui::Vec2;
-
-    let app = app::App::default();
-    let mut native_options = eframe::NativeOptions::default();
-    native_options.initial_window_size = Some(Vec2::new(400.0, 150.0));
-    eframe::run_native(Box::new(app), native_options);
-}
-
-pub fn extract_file(uexp: PathBuf, output: PathBuf, overwrite: bool) -> AResult<()> {
-    if output.exists() && !overwrite {
-        return Err(anyhow::anyhow!(
-            "Output file already exists! Specify -o to overwrite"
-        ));
-    }
-
+pub fn extract_file(uexp: PathBuf, output: PathBuf) -> AResult<()> {
     let mut file = File::create(output)?;
     let mut uexp = File::open(uexp)?;
     let mut uexp_bytes = Vec::new();
@@ -108,7 +78,7 @@ pub fn extract_file(uexp: PathBuf, output: PathBuf, overwrite: bool) -> AResult<
 const UEXP_SIZE_OFFSET: usize = 0x24;
 const UEXP_FILE_START: usize = 0x34;
 
-pub fn inject_file(inject: PathBuf, uexp: PathBuf, uasset: PathBuf, force: bool) -> AResult<()> {
+pub fn inject_file(inject: PathBuf, uexp: PathBuf, uasset: PathBuf) -> AResult<()> {
 
     let uexp_path = uexp.clone();
     let uasset_path = uasset.clone();
@@ -123,9 +93,7 @@ pub fn inject_file(inject: PathBuf, uexp: PathBuf, uasset: PathBuf, force: bool)
         .map(|e| e.to_string_lossy().to_string())
         .unwrap_or("".into());
 
-    if (uexp_extension.to_lowercase() != "uexp" || uasset_extension.to_lowercase() != "uasset")
-        && !force
-    {
+    if uexp_extension.to_lowercase() != "uexp" || uasset_extension.to_lowercase() != "uasset" {
         return Err(anyhow::anyhow!("Filenames do not have correct extensions! Did you enter the UEXP and UASSET in the correct order?"));
     }
 
